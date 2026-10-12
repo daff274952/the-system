@@ -28,15 +28,20 @@ Struktur tabel ada di [`schema.sql`](schema.sql).
 
 ## Struktur
 
+Aplikasi berjalan sebagai **satu halaman (single-page app)**. Semua layar (login, daftar, profil, halaman utama) dirender oleh JavaScript, dan data dikirim lewat API JSON, jadi pindah layar tidak memuat ulang halaman. Data awal ikut di HTML, sehingga layar pertama tampil tanpa menunggu request tambahan.
+
 ```
-index.php        halaman utama (status, quest, profil, riwayat)
-login.php        login & daftar
-profile.php      isi / edit profil
-logout.php
-api.php          simpan & muat progres (JSON)
-schema.sql       struktur database
-includes/        koneksi DB, sesi, helper state & profil
-assets/          CSS, JavaScript aplikasi, efek latar
+index.php          satu-satunya halaman HTML + data awal
+api.php            API JSON: boot, login, register, logout, profile, save, weight, reset
+login.php          pengalihan ke #masuk / #daftar (link lama)
+profile.php        pengalihan ke #profil (link lama)
+schema.sql         struktur database
+includes/          koneksi DB, sesi, validasi login & profil, helper state
+assets/core.js     helper, pemanggil API, notifikasi, router antar layar
+assets/views.js    layar login/daftar dan profil
+assets/app.js      halaman utama (status, quest, pengingat, riwayat)
+assets/style.css   tampilan
+.htaccess          cache CSS/JS, kompresi, blokir file privat
 ```
 
 ## Kebutuhan

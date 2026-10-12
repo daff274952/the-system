@@ -2,49 +2,41 @@
 require __DIR__ . '/includes/bootstrap.php';
 require __DIR__ . '/includes/state.php';
 require __DIR__ . '/includes/profile.php';
+require __DIR__ . '/includes/auth.php';
 
-$user = require_login();
-$uid = (int) $user['id'];
-$profile = load_profile($uid);
-if (!$profile) {
-    header('Location: profile.php'); // Player wajib mengisi profil dulu
-    exit;
-}
-$newPlayer = !empty($_SESSION['new_player']);
-unset($_SESSION['new_player']);
-
-$boot = [
-    'state' => load_state($uid),
-    'history' => load_history($uid),
-    'profile' => $profile,
-    'weights' => load_weights($uid),
-    'rankLevels' => RANK_LEVELS,
-    'csrf' => csrf_token(),
-    'newPlayer' => $newPlayer,
-];
+// Satu halaman untuk semuanya. Data awal ikut di HTML, jadi layar pertama tampil tanpa menunggu request.
+$boot = build_boot(current_user());
+$v = fn(string $f) => 'assets/' . $f . '?v=' . filemtime(__DIR__ . '/assets/' . $f);
 ?>
 <!doctype html>
 <html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05070f">
 <title>The System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="<?= $v('style.css') ?>">
+<script defer src="<?= $v('core.js') ?>"></script>
+<script defer src="<?= $v('views.js') ?>"></script>
+<script defer src="<?= $v('app.js') ?>"></script>
+<script defer src="<?= $v('bg.js') ?>"></script>
 </head>
 <body>
-
 <canvas id="bg" aria-hidden="true"></canvas>
-<div class="wrap">
+
+<main class="auth" id="view-auth" hidden></main>
+<div class="wrap profile-page" id="view-profile" hidden></div>
+
+<div class="wrap" id="view-app" hidden>
   <header class="top">
     <div class="brand">[ The System ]</div>
     <div class="who">
-      <span>Login sebagai <b><?= e($user['username']) ?></b></span>
+      <span>Login sebagai <b id="whoName"></b></span>
       <span class="sync" id="sync" aria-live="polite"></span>
-      <form method="post" action="logout.php">
-        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
-        <button class="btn" type="submit">Keluar</button>
-      </form>
+      <button class="btn" type="button" id="logoutBtn">Keluar</button>
     </div>
   </header>
   <div class="clock" id="clock"></div>
@@ -87,7 +79,7 @@ $boot = [
         <button class="btn" type="submit">Simpan</button>
       </form>
     </div>
-    <div class="prof-actions"><span id="goalTxt"></span><a class="btn" href="profile.php">Edit profil</a></div>
+    <div class="prof-actions"><span id="goalTxt"></span><a class="btn" href="#profil">Edit profil</a></div>
   </section>
 
   <section class="win" aria-labelledby="dq">
@@ -163,7 +155,5 @@ $boot = [
 </div>
 
 <script>window.BOOT = <?= json_encode($boot, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;</script>
-<script src="assets/bg.js"></script>
-<script src="assets/app.js"></script>
 </body>
 </html>

@@ -1,4 +1,6 @@
+/* Halaman utama: status, daily quest, quest tambahan, pengingat, profil, riwayat. Dipasang oleh router di core.js. */
 (function(){
+const {$,toast,notify,chime,sysNotify,canNotif}=Sys;
 const GOALS=[
   {id:"push",name:"Push-up",target:100,unit:"",steps:[1,10,25]},
   {id:"sit",name:"Sit-up",target:100,unit:"",steps:[1,10,25]},
@@ -6,8 +8,10 @@ const GOALS=[
   {id:"run",name:"Lari",target:10,unit:" km",steps:[0.5,1,2]}
 ];
 // Target harian mengikuti profil Player (tingkat kebugaran).
-const PT=(window.BOOT&&window.BOOT.profile&&window.BOOT.profile.targets)||{};
-GOALS.forEach(g=>{if(PT[g.id]>0)g.target=PT[g.id]});
+function applyTargets(){
+  const PT=(profile&&profile.targets)||{};
+  GOALS.forEach(g=>{if(PT[g.id]>0)g.target=PT[g.id]});
+}
 const STATS=[
   ["str","STR","Kekuatan"],["agi","AGI","Kelincahan"],["vit","VIT","Daya tahan"],
   ["int","INT","Kecerdasan"],["per","PER","Persepsi"]
@@ -29,36 +33,30 @@ const fresh=()=>({
   rem:{on:true,times:["07:00","12:00","19:00","22:00"],fired:{date:"",list:[]}}
 });
 
-/* ---- state dari server (MySQL) ---- */
-const BOOT=window.BOOT||{};
-let S=Object.assign(fresh(),BOOT.state||{});
-if(!S.daily)S.daily=fresh().daily;
-if(!S.rem)S.rem=fresh().rem;
-if(BOOT.newPlayer&&!S.quests.length)S.quests=fresh().quests; // contoh quest untuk Player baru
-let history=BOOT.history||[];
+/* ---- state dari server (MySQL), diisi saat mount() ---- */
+let BOOT=null,S=null,history=[],profile=null,weights=[];
 
+// Perubahan langsung tampil; penyimpanan ke server berjalan di belakang (debounce).
 let saveTimer=null,saving=false,dirty=false;
 function setSync(text,kind){const el=$("sync");if(el){el.textContent=text;el.dataset.kind=kind||""}}
 function save(){dirty=true;setSync("Menyimpan…","busy");clearTimeout(saveTimer);saveTimer=setTimeout(flush,600)}
 async function flush(){
   if(saving){saveTimer=setTimeout(flush,300);return}
-  if(!dirty)return;
+  if(!dirty||!Sys.boot.user)return;
   saving=true;dirty=false;
   try{
-    const r=await fetch("api.php",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":BOOT.csrf},body:JSON.stringify({action:"save",state:S})});
-    if(r.status===401){location.href="login.php";return}
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok)throw new Error(j.error||"Gagal menyimpan");
+    const j=await Sys.api("save",{state:S});
     if(j.history){history=j.history;renderHistory()}
     setSync(dirty?"Menyimpan…":"Tersimpan","ok");
   }catch(e){
-    dirty=true;setSync("Gagal menyimpan, mencoba lagi…","err");
+    dirty=true;
+    if(e.status===401){setSync("Belum tersimpan","err");return}
+    setSync("Gagal menyimpan, mencoba lagi…","err");
     clearTimeout(saveTimer);saveTimer=setTimeout(flush,5000);
   }finally{saving=false}
 }
 addEventListener("beforeunload",e=>{if(dirty||saving){e.preventDefault();e.returnValue=""}});
 
-const $=id=>document.getElementById(id);
 const xpNeed=l=>Math.round(100+l*60+l*l*4);
 const maxHp=()=>100+S.stats.vit*10+S.level*5;
 const maxMp=()=>10+S.stats.int*5;
@@ -79,42 +77,7 @@ function titleOf(){
 }
 function addLog(m){S.log.unshift({t:Date.now(),m});S.log=S.log.slice(0,60)}
 
-/* ---- audio (starts after interaction) ---- */
-let ac;
-function chime(up){
-  try{
-    ac=ac||new (window.AudioContext||window.webkitAudioContext)();
-    const notes=up?[523,659,784,1047]:[880,1320];
-    notes.forEach((f,i)=>{
-      const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+i*.09;
-      o.type="sine";o.frequency.value=f;g.gain.setValueAtTime(0,t);
-      g.gain.linearRampToValueAtTime(.12,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+.5);
-      o.connect(g).connect(ac.destination);o.start(t);o.stop(t+.55);
-    });
-  }catch(e){}
-}
-
-/* ---- toasts & browser notifications ---- */
-function toast(title,body,kind,ms){
-  const el=document.createElement("div");el.className="toast"+(kind?" "+kind:"");
-  const a=document.createElement("div");a.className="tt";a.textContent=title;
-  const b=document.createElement("div");b.className="tb";b.textContent=body;
-  el.append(a,b);$("toasts").prepend(el);
-  el.onclick=()=>el.remove();
-  setTimeout(()=>el.remove(),ms||5000);
-}
-const canNotif=()=>{try{return "Notification" in window}catch(e){return false}};
-function sysNotify(title,body){
-  try{if(canNotif()&&Notification.permission==="granted")new Notification("[Sistem] "+title,{body,tag:"system-"+title})}catch(e){}
-  if(document.hidden)flashTitle(title);
-}
-let flashT=null;const baseTitle=document.title;
-function flashTitle(msg){
-  clearInterval(flashT);let on=false;
-  flashT=setInterval(()=>{on=!on;document.title=on?"[!] "+msg:baseTitle},1000);
-}
-document.addEventListener("visibilitychange",()=>{if(!document.hidden){clearInterval(flashT);document.title=baseTitle}});
-
+/* ---- pengingat daily quest ---- */
 function remaining(){
   const n=new Date(),m=new Date(n);m.setHours(24,0,0,0);
   const mins=Math.floor((m-n)/60000);
@@ -154,25 +117,6 @@ function renderRem(){
     :'<span class="perm">Belum ada jam pengingat.</span>';
   $("permState").innerHTML=permText();
   $("permBtn").hidden=!canNotif()||Notification.permission!=="default";
-}
-
-/* ---- modal queue ---- */
-const queue=[];let showing=false;
-function notify(n){queue.push(n);if(n.tag!=="Identitas")sysNotify(n.title,n.body||(n.rewards||[]).join(" · "));if(!showing)nextModal()}
-function nextModal(){
-  const n=queue.shift();
-  if(!n){$("modal").hidden=true;showing=false;return}
-  showing=true;
-  $("mTag").textContent=n.tag||"Notifikasi";
-  $("mTitle").textContent=n.title;
-  $("mBody").textContent=n.body||"";
-  $("mRew").innerHTML=(n.rewards||[]).map(r=>"<div>"+r+"</div>").join("");
-  $("mExtra").innerHTML="";
-  if(n.extra)$("mExtra").appendChild(n.extra);
-  $("mOk").textContent=n.ok||"Terima";
-  $("mOk").onclick=()=>{if(n.onOk&&n.onOk()===false)return;nextModal()};
-  $("modal").hidden=false;$("mOk").focus();
-  if(n.sound)chime(n.sound==="up");
 }
 
 function gainXp(x){
@@ -265,7 +209,7 @@ function render(){
 
 /* ---- events ---- */
 document.addEventListener("click",e=>{
-  const t=e.target.closest("button");if(!t)return;
+  const t=e.target.closest("#view-app button");if(!t||!S)return;
   if(t.dataset.stat&&S.points>0){
     S.points--;S.stats[t.dataset.stat]++;
     if(t.dataset.stat==="vit")S.hp+=10;if(t.dataset.stat==="int")S.mp+=5;
@@ -340,21 +284,27 @@ $("nameBtn").addEventListener("click",()=>{
   setTimeout(()=>inp.select(),30);
 });
 
-$("resetBtn").addEventListener("click",()=>{
+function renderFoot(confirming){
   const f=$("foot");
-  f.innerHTML='<span>Semua progres akan hilang. Yakin?</span><button class="btn" id="noR">Batal</button><button class="btn danger" id="yesR">Ya, reset</button>';
-  $("noR").onclick=()=>location.reload();
+  if(!confirming){
+    f.innerHTML='<button class="btn danger" id="resetBtn">Reset Player</button>';
+    $("resetBtn").onclick=()=>renderFoot(true);
+    return;
+  }
+  f.innerHTML='<span>Level, stat, quest, dan riwayat akan hilang. Profil tetap tersimpan. Yakin?</span><button class="btn" id="noR">Batal</button><button class="btn danger" id="yesR">Ya, reset</button>';
+  $("noR").onclick=()=>renderFoot(false);
   $("yesR").onclick=async()=>{
     clearTimeout(saveTimer);dirty=false;
-    try{
-      const r=await fetch("api.php",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":BOOT.csrf},body:JSON.stringify({action:"reset"})});
-      if(!r.ok)throw 0;
-      location.reload();
-    }catch(e){toast("Reset gagal","Database tidak bisa dihubungi. Coba lagi.","alert",5000)}
+    try{await Sys.api("reset");location.reload()}
+    catch(e){toast("Reset gagal",e.message,"alert",5000)}
   };
-});
+}
 
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("modal").hidden)nextModal()});
+$("logoutBtn").addEventListener("click",async()=>{
+  // Simpan perubahan yang belum terkirim dulu.
+  if(dirty){clearTimeout(saveTimer);await flush()}
+  Sys.logout();
+});
 
 /* ---- clock & countdown ---- */
 function tick(){
@@ -391,7 +341,7 @@ function renderProfile(){
   ];
   $("prof").innerHTML=items.map(i=>'<div><dt>'+i[0]+'</dt><dd class="'+(i[2]||"")+'">'+i[1]+'</dd></div>').join("");
 
-  const RL=BOOT.rankLevels||{E:1,D:10,C:20,B:35,A:50,S:70},need=RL[p.targetRank]||1;
+  const RL=(BOOT.meta&&BOOT.meta.rankLevels)||{E:1,D:10,C:20,B:35,A:50,S:70},need=RL[p.targetRank]||1;
   const reached=S.level>=need;
   $("tRank").textContent="Rank "+p.targetRank;
   $("tRankN").textContent=reached?"Tercapai di Level "+S.level:"Level "+S.level+" / "+need+" · "+(need-S.level)+" level lagi";
@@ -420,17 +370,13 @@ function renderWeights(){
   const diff=l.kg-w[0].kg;
   $("wtCap").textContent=w.length+" catatan terakhir · "+(Math.abs(diff)<0.05?"stabil":(diff>0?"naik ":"turun ")+Math.abs(diff).toFixed(1)+" kg")+(profile.targetWeight?" · garis kuning = target":"");
 }
-let profile=BOOT.profile||null,weights=BOOT.weights||[];
-if($("wtInput")&&profile)$("wtInput").value=profile.weight;
-$("wtForm")&&$("wtForm").addEventListener("submit",async e=>{
+$("wtForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const kg=parseFloat($("wtInput").value);
   if(!(kg>=25&&kg<=300)){toast("Berat tidak valid","Isi berat antara 25 dan 300 kg.","alert",4000);return}
   try{
-    const r=await fetch("api.php",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":BOOT.csrf},body:JSON.stringify({action:"weight",kg})});
-    if(r.status===401){location.href="login.php";return}
-    const j=await r.json();if(!r.ok)throw new Error(j.error);
-    const prev=profile.weight;profile=j.profile;weights=j.weights;renderProfile();
+    const j=await Sys.api("weight",{kg});
+    const prev=profile.weight;profile=BOOT.profile=j.profile;weights=BOOT.weights=j.weights;renderProfile();
     const d=profile.weight-prev;
     addLog("Berat badan dicatat: "+profile.weight.toFixed(1)+" kg.");save();
     toast("Berat tercatat",profile.weight.toFixed(1)+" kg"+(Math.abs(d)>=0.05?" ("+(d>0?"+":"−")+Math.abs(d).toFixed(1)+" kg)":"")+".","gold",3500);
@@ -459,7 +405,35 @@ function renderHistory(){
   $("histSum").textContent=done+" dari "+history.length+" hari tercatat selesai";
 }
 
-checkDay();render();renderRem();renderHistory();tick();setInterval(tick,1000);
-setSync("Tersimpan","ok");
-if(BOOT.newPlayer){S.hp=maxHp();S.mp=maxMp();render();save();notify({tag:"Notifikasi",title:"Kamu telah memperoleh syarat untuk menjadi Player.",body:"Apakah kamu menerimanya?",ok:"Terima"})}
+/* ---- dipanggil router ---- */
+function mount(boot){
+  BOOT=boot;
+  S=boot.state=Object.assign(fresh(),boot.state||{}); // satu objek: layar profil membaca nama terbaru dari sini
+  if(!S.daily)S.daily=fresh().daily;
+  if(!S.rem)S.rem=fresh().rem;
+  if(boot.newPlayer&&!S.quests.length)S.quests=fresh().quests; // contoh quest untuk Player baru
+  history=boot.history||[];
+  profile=boot.profile||null;
+  weights=boot.weights||[];
+  applyTargets();
+  $("whoName").textContent=boot.user.username;
+  if(profile)$("wtInput").value=profile.weight;
+  renderFoot(false);
+  checkDay();render();renderRem();renderHistory();tick();setInterval(tick,1000);
+  setSync("Tersimpan","ok");
+  if(boot.newPlayer){
+    boot.newPlayer=false;
+    S.hp=maxHp();S.mp=maxMp();render();save();
+    notify({tag:"Notifikasi",title:"Kamu telah memperoleh syarat untuk menjadi Player.",body:"Apakah kamu menerimanya?",ok:"Terima"});
+  }
+}
+function refresh(){render();renderRem();renderHistory()}
+function setProfile(p,w,name){
+  profile=p;weights=w||weights;
+  if(name){S.name=name}
+  applyTargets();
+  $("wtInput").value=p.weight;
+  render();
+}
+window.SystemApp={mount,refresh,setProfile};
 })();

@@ -1,0 +1,27 @@
+# Jangan tampilkan daftar file
+Options -Indexes
+
+# File yang tidak boleh dibuka lewat browser
+<FilesMatch "^(schema\.sql|README\.md|\.gitignore|\.htaccess)$">
+  Require all denied
+</FilesMatch>
+
+# Kompres teks supaya lebih cepat terkirim
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript text/javascript application/json image/svg+xml
+</IfModule>
+
+# CSS/JS disimpan lama di browser; index.php menambahkan ?v=<waktu ubah> jadi versi baru tetap terambil
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/javascript "access plus 1 year"
+</IfModule>
+
+# Cadangan kalau mod_expires tidak aktif (mis. XAMPP bawaan)
+<IfModule mod_headers.c>
+  <FilesMatch "\.(css|js)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
