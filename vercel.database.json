@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "api/*.php": {
+      "runtime": "vercel-php@0.7.4"
+    }
+  },
+  "routes": [
+    { "src": "/(includes/.*|schema\\.sql|README\\.md|vercel\\.json|\\.htaccess|\\.gitignore|\\.vercelignore)", "status": 404 },
+    { "src": "/login\\.php", "status": 302, "headers": { "Location": "/#masuk" } },
+    { "src": "/profile\\.php", "status": 302, "headers": { "Location": "/#profil" } },
+    { "src": "/api\\.php", "dest": "/api/api.php" },
+    { "src": "/(index\\.php)?", "dest": "/api/index.php" },
+    { "src": "/assets/(.*)", "headers": { "Cache-Control": "public, max-age=31536000, immutable" }, "continue": true },
+    { "handle": "filesystem" }
+  ]
+}

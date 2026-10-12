@@ -1,2 +1,8 @@
-# Konfigurasi lokal XAMPP tidak boleh ikut ke Vercel (di Vercel pakai Environment Variables)
-includes/config.php
+# Sementara: Vercel hanya menayangkan versi tanpa database (index.html + assets/).
+# Untuk versi database: hapus baris di bawah ini, lalu ganti vercel.json dengan isi vercel.database.json.
+api/
+includes/
+*.php
+schema.sql
+.htaccess
+vercel.database.json

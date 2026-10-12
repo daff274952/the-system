@@ -31,6 +31,7 @@ function auth(mode){
       '<button class="btn" type="submit">'+(reg?"Terima &amp; Daftar":"Masuk")+'</button>'+
     '</form>'+
     '<p class="switch">'+(reg?'Sudah punya akun? <a href="#masuk">Masuk</a>':'Belum jadi Player? <a href="#daftar">Daftar sekarang</a>')+'</p>'+
+    (Sys.boot.local?'<p class="local-note">Mode tanpa database: akun hanya tersimpan di browser ini. Daftar dulu kalau baru pertama membuka aplikasi di perangkat ini.</p>':'')+
   '</section>';
   const form=$("authForm");
   $("username").focus();

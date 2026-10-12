@@ -12,11 +12,31 @@ Aplikasi pelacak kebiasaan dan olahraga bergaya "Sistem" dari *Solo Leveling*. S
 - **Pengingat**: notifikasi di halaman dan notifikasi browser pada jam yang bisa diatur.
 - **Riwayat**: 14 hari terakhir daily quest dan grafik berat badan.
 
-## Menjalankan di XAMPP
+## Mode sekarang: tanpa database (sementara)
+
+Untuk sementara aplikasi berjalan **tanpa database dan tanpa PHP**. Halaman `index.html` memakai [`assets/local-api.js`](assets/local-api.js) sebagai pengganti `api.php`, dan semua akun, profil, serta progres disimpan di `localStorage` browser.
+
+- **Kelebihan:** bisa langsung di-deploy ke Vercel (atau GitHub Pages, Netlify, dll.) sebagai situs statis, tanpa pengaturan apa pun.
+- **Batasan:** data hanya ada di browser dan perangkat itu. Kalau data browser dihapus atau kamu pindah perangkat, akun dan progres tidak ikut. Password disimpan sebagai hash SHA-256, tapi ini bukan pengamanan setara server.
+
+**Deploy ke Vercel (mode ini):** import repo di Vercel, pilih Framework Preset **Other**, kosongkan build command, lalu Deploy. `.vercelignore` memastikan hanya `index.html` dan `assets/` yang ter-upload.
+
+**Menjalankan lokal:** buka `http://localhost/system-hunter/` di XAMPP (cukup Apache), atau server statis apa pun.
+
+### Mengaktifkan lagi versi database
+
+Kode versi database (PHP + MySQL) tetap ada: `index.php`, `api.php`, `includes/`, dan `schema.sql`.
+
+- **Di XAMPP:** buka `http://localhost/system-hunter/index.php`, atau hapus baris `DirectoryIndex` di `.htaccess`.
+- **Di Vercel:** ganti isi `vercel.json` dengan `vercel.database.json`, hapus daftar file di `.vercelignore` (kecuali `includes/config.php`), lalu ikuti langkah **Deploy ke Vercel (versi database)** di bawah.
+
+Data di mode tanpa database tidak otomatis pindah ke database.
+
+## Menjalankan versi database di XAMPP
 
 1. Salin folder ini ke `C:\xampp\htdocs\system-hunter`.
 2. Di XAMPP Control Panel, klik **Start** pada **Apache** dan **MySQL**.
-3. Buka `http://localhost/system-hunter/`.
+3. Buka `http://localhost/system-hunter/index.php`.
 
 Database `system_hunter` dan semua tabelnya dibuat otomatis saat aplikasi pertama dibuka.
 
@@ -26,7 +46,7 @@ Salin `includes/config.example.php` menjadi `includes/config.php`, lalu isi host
 
 Struktur tabel ada di [`schema.sql`](schema.sql).
 
-## Deploy ke Vercel
+## Deploy ke Vercel (versi database)
 
 Vercel tidak punya PHP dan MySQL bawaan. Proyek ini memakai runtime komunitas [`vercel-php`](https://github.com/vercel-community/php) (sudah diatur di `vercel.json`) dan database MySQL di layanan luar.
 
@@ -65,7 +85,8 @@ Pesan error di halaman tidak menampilkan detail teknis. Detailnya tercatat di lo
 Aplikasi berjalan sebagai **satu halaman (single-page app)**. Semua layar (login, daftar, profil, halaman utama) dirender oleh JavaScript, dan data dikirim lewat API JSON, jadi pindah layar tidak memuat ulang halaman. Data awal ikut di HTML, sehingga layar pertama tampil tanpa menunggu request tambahan.
 
 ```
-index.php          satu-satunya halaman HTML + data awal
+index.html         halaman versi tanpa database (dipakai sekarang)
+index.php          halaman versi database + data awal
 api.php            API JSON: boot, login, register, logout, profile, save, weight, reset
 login.php          pengalihan ke #masuk / #daftar (link lama)
 profile.php        pengalihan ke #profil (link lama)
@@ -73,8 +94,10 @@ schema.sql         struktur database
 includes/          koneksi DB, sesi (disimpan di MySQL), validasi login & profil, helper state
 api/index.php      pintu masuk untuk Vercel (memanggil index.php)
 api/api.php        pintu masuk API untuk Vercel (memanggil api.php)
-vercel.json        runtime PHP + aturan URL untuk Vercel
+vercel.json        pengaturan Vercel untuk situs statis (mode tanpa database)
+vercel.database.json  pengaturan Vercel versi database (runtime PHP)
 assets/core.js     helper, pemanggil API, notifikasi, router antar layar
+assets/local-api.js  pengganti api.php di browser (mode tanpa database)
 assets/views.js    layar login/daftar dan profil
 assets/app.js      halaman utama (status, quest, pengingat, riwayat)
 assets/style.css   tampilan
