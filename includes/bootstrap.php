@@ -3,10 +3,37 @@ declare(strict_types=1);
 
 date_default_timezone_set('Asia/Jakarta');
 
+require __DIR__ . '/session.php';
+
+/**
+ * Konfigurasi database, urutan prioritas:
+ * 1. includes/config.php (XAMPP / hosting biasa)
+ * 2. environment variable DB_HOST, DB_USER, ... (Vercel)
+ * 3. includes/config.example.php (default XAMPP)
+ */
 function config(): array
 {
     static $c = null;
-    return $c ??= require __DIR__ . (is_file(__DIR__ . '/config.php') ? '/config.php' : '/config.example.php');
+    if ($c !== null) {
+        return $c;
+    }
+    if (is_file(__DIR__ . '/config.php')) {
+        return $c = require __DIR__ . '/config.php';
+    }
+    if (getenv('DB_HOST')) {
+        $flag = fn(string $k) => in_array(strtolower((string) getenv($k)), ['1', 'true', 'yes', 'on'], true);
+        return $c = [
+            'db_host' => getenv('DB_HOST'),
+            'db_port' => (int) (getenv('DB_PORT') ?: 3306),
+            'db_name' => getenv('DB_NAME') ?: 'system_hunter',
+            'db_user' => (string) getenv('DB_USER'),
+            'db_pass' => (string) getenv('DB_PASS'),
+            'db_ssl' => $flag('DB_SSL'),
+            'db_ssl_ca' => getenv('DB_SSL_CA') ?: null,
+            'debug' => $flag('APP_DEBUG'),
+        ];
+    }
+    return $c = require __DIR__ . '/config.example.php';
 }
 
 /** Detail error hanya ditampilkan kalau 'debug' => true di config. Di hosting biarkan false. */
@@ -17,16 +44,6 @@ function is_debug(): bool
 
 ini_set('display_errors', is_debug() ? '1' : '0');
 ini_set('log_errors', '1');
-
-$https = ($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off'
-    || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-session_set_cookie_params([
-    'httponly' => true,
-    'samesite' => 'Lax',
-    'secure' => $https, // cookie login hanya dikirim lewat HTTPS saat situs memakai HTTPS
-]);
-session_name('system_hunter');
-session_start();
 
 set_exception_handler(function (Throwable $e) {
     if ($e instanceof PDOException) {
@@ -71,6 +88,22 @@ function db(): PDO
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ];
+    if (!empty($c['db_ssl'])) {
+        // Database cloud (TiDB Cloud, Aiven, dll.) mewajibkan koneksi terenkripsi.
+        $ca = $c['db_ssl_ca'] ?? null;
+        if ($ca && !str_starts_with($ca, '/') && !preg_match('/^[A-Za-z]:/', $ca)) {
+            $ca = dirname(__DIR__) . '/' . $ca; // path relatif dari folder proyek
+        }
+        $ca ??= current(array_filter([
+            '/etc/pki/tls/certs/ca-bundle.crt',   // Vercel / Amazon Linux
+            '/etc/ssl/certs/ca-certificates.crt', // Debian / Ubuntu
+            '/etc/ssl/cert.pem',                  // macOS / Alpine
+        ], 'is_file')) ?: null;
+        if ($ca) {
+            $opts[PDO::MYSQL_ATTR_SSL_CA] = $ca;
+        }
+        $opts[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
+    }
     $base = "mysql:host={$c['db_host']};port={$c['db_port']};charset=utf8mb4";
     try {
         $pdo = new PDO($base . ";dbname={$c['db_name']}", $c['db_user'], $c['db_pass'], $opts);
@@ -82,13 +115,26 @@ function db(): PDO
         $pdo = new PDO($base, $c['db_user'], $c['db_pass'], $opts);
         run_schema($pdo, $c['db_name'], true);
     }
-    // Versi schema.sql berubah (tabel baru) -> jalankan lagi; semua perintahnya "IF NOT EXISTS".
-    $version = (string) filemtime(dirname(__DIR__) . '/schema.sql');
-    if (($_SESSION['schema_v'] ?? '') !== $version) {
-        run_schema($pdo, $c['db_name'], false);
-        $_SESSION['schema_v'] = $version;
-    }
+    ensure_schema($pdo, $c['db_name']);
     return $pdo;
+}
+
+/**
+ * Jalankan schema.sql lagi kalau isinya berubah (mis. ada tabel baru).
+ * Versi yang sudah dijalankan dicatat di tabel meta; semua perintahnya "IF NOT EXISTS".
+ */
+function ensure_schema(PDO $pdo, string $dbName): void
+{
+    $hash = sha1_file(dirname(__DIR__) . '/schema.sql');
+    try {
+        $current = $pdo->query("SELECT v FROM meta WHERE k = 'schema'")->fetchColumn();
+    } catch (PDOException $e) {
+        $current = null; // tabel meta belum ada
+    }
+    if ($current !== $hash) {
+        run_schema($pdo, $dbName, false);
+        $pdo->prepare("REPLACE INTO meta (k, v) VALUES ('schema', ?)")->execute([$hash]);
+    }
 }
 
 /**
@@ -157,12 +203,4 @@ function current_user(): ?array
     return $st->fetch() ?: null;
 }
 
-function require_login(): array
-{
-    $u = current_user();
-    if (!$u) {
-        header('Location: login.php');
-        exit;
-    }
-    return $u;
-}
+start_session();

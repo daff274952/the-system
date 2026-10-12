@@ -1,0 +1,2 @@
+# Konfigurasi lokal XAMPP tidak boleh ikut ke Vercel (di Vercel pakai Environment Variables)
+includes/config.php

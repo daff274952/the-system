@@ -104,3 +104,17 @@ CREATE TABLE IF NOT EXISTS weight_logs (
   PRIMARY KEY (user_id, log_date),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- Sesi login disimpan di database (bukan file), supaya tetap jalan di serverless seperti Vercel.
+CREATE TABLE IF NOT EXISTS sessions (
+  id         VARCHAR(128) PRIMARY KEY,
+  data       MEDIUMBLOB   NOT NULL,
+  expires_at INT UNSIGNED NOT NULL,
+  KEY idx_expires (expires_at)
+) ENGINE=InnoDB;
+
+-- Catatan internal aplikasi, misalnya versi schema yang sudah dijalankan.
+CREATE TABLE IF NOT EXISTS meta (
+  k VARCHAR(50)  PRIMARY KEY,
+  v VARCHAR(100) NOT NULL
+) ENGINE=InnoDB;

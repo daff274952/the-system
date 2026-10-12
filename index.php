@@ -6,7 +6,7 @@ require __DIR__ . '/includes/auth.php';
 
 // Satu halaman untuk semuanya. Data awal ikut di HTML, jadi layar pertama tampil tanpa menunggu request.
 $boot = build_boot(current_user());
-$v = fn(string $f) => 'assets/' . $f . '?v=' . filemtime(__DIR__ . '/assets/' . $f);
+$v = fn(string $f) => 'assets/' . $f . '?v=' . substr(md5_file(__DIR__ . '/assets/' . $f), 0, 10); // versi berubah kalau isi file berubah
 ?>
 <!doctype html>
 <html lang="id">
