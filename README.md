@@ -26,6 +26,15 @@ Salin `includes/config.example.php` menjadi `includes/config.php`, lalu isi host
 
 Struktur tabel ada di [`schema.sql`](schema.sql).
 
+## Upload ke hosting
+
+1. Di cPanel, buat database MySQL beserta user-nya, lalu beri user itu akses penuh ke database tersebut.
+2. Upload semua file ke `public_html` (atau subfolder).
+3. Salin `includes/config.example.php` menjadi `includes/config.php`, lalu isi data database dari hosting. Biarkan `'debug' => false`.
+4. Buka domainnya. Tabel dibuat otomatis. Aplikasi tidak membutuhkan izin `CREATE DATABASE`.
+
+Pesan error di halaman tidak menampilkan detail teknis. Detailnya tercatat di log error server. Cookie login otomatis hanya dikirim lewat HTTPS kalau situs memakai HTTPS.
+
 ## Struktur
 
 Aplikasi berjalan sebagai **satu halaman (single-page app)**. Semua layar (login, daftar, profil, halaman utama) dirender oleh JavaScript, dan data dikirim lewat API JSON, jadi pindah layar tidak memuat ulang halaman. Data awal ikut di HTML, sehingga layar pertama tampil tanpa menunggu request tambahan.

@@ -8,4 +8,8 @@ return [
     'db_name' => 'system_hunter',
     'db_user' => 'root',
     'db_pass' => '',
+
+    // true = tampilkan detail error di halaman (hanya untuk komputer sendiri).
+    // Di hosting WAJIB false; error tetap tercatat di log server.
+    'debug' => false,
 ];
